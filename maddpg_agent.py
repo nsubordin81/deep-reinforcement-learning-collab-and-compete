@@ -156,6 +156,136 @@ class Agent:
             )
 
 
+class MADDPG:
+    def __init__(self, discount_factor=0.99, tau=0.03):
+        super(MADDPG, self).__init()
+
+        # initialize agents (this will be your Agent Class)
+
+        self.discount_factor = discount_factor
+        self.tau = tau
+        self.iter = 0
+
+    def get_local_actors(self):
+        actors = [agent.actor for agent in self.maddpg_agent]
+        return actors
+
+    def get_target_actors(self):
+        target_actors = [agent.target_actor for agent in self.maddpg_agent]
+        return target_actors
+
+    def local_act(self, obs_all_agents, noise=0.0):
+        actions = [
+            agent.act(obs, noise)
+            for agent, obs in zip(self.maddpg_agent, obs_all_agents)
+        ]
+        return actions
+
+    def target_act(self, obs_all_agents, noise=0.0):
+        target_actions = [
+            agent.target_act(obs, noise)
+            for agent, obs in zip(self.maddpg_agent, obs_all_agents)
+        ]
+        return target_actions
+
+    def update_local_actors_and_critics(self, samples, agent_number, logger):
+
+        # ok so let's map over the samples that come to us from the replay buffer,
+        # and let's map with the transpose function to make the values so the first index is the agent index
+        # then I guess we unpack that tensor into a series of objects
+        # and they are all arrays like this?? [[agent1obs1, agent1obs2, . . . ], [agent2obs1, agent2obs2, ...]]
+        # so you can easily index out all of the observations, rewards, next_obs, dones for a given agent
+        obs, obs_full, action, reward, next_obs, next_obs_full, done = map(
+            transpose_to_tensor, samples
+        )
+
+        # vertically stack the m separate observations into a tensor of m observation rows by n param cols
+        obs_full = torch.stack(obs_full)
+        next_obs_full = torch.stack(next_obs_full)
+
+        # get the agent we are updating from the list by agent index
+        agent = self.maddpg_agent[agent_number]
+        agent.critic_optimizer.zero_grad()
+
+        # do the critic loss, (y-Qtarget(s,a))^2
+        # corresponds to the first part of the update in the MADDPG paper
+        target_actions = self.target_act(next_obs)
+        # torch.cat is a new one for me, this is along dim 1,
+        # so thinking in 2d it will concat the tensors left to right, doubling the 'column space'
+        # reviewing how maddpg gets target actions as a numpy array of each agent's actions,
+        # this will combine the actions for all agents into one tensor whose rows are per obs and
+        # columns include action values like [agent1action1, agent1action2, agent2action1, agent2action2]
+        target_actions = torch.cat(target_actions, dim=1)
+        # now combine those target actions with a transposed observation set, so we are back to agents as rows
+        # with that setup we can easily join up the observations with the actions by agent going down the m dimension
+        target_critic_input = torch.cat((next_obs_full.t(), target_actions), dim=1).to(
+            device
+        )
+
+        # get a q value from a forward pass with the target network, but we aren't going to backpropogate
+        with torch.no_grad():
+            q_next = agent.target_critic(target_critic_input)
+
+        # this is the typical value estimate for q learning wrt this agent
+        y = reward[agent_number].view(-1, 1) + self.discount_factor * q_next * (
+            1 - done[agent_number].view(-1, 1)
+        )
+        # we did this for target as well, not sure if the above description is correct but same is happening for target as
+        # is for local.
+        action = torch.cat(action, dim=1)
+        # same thing as was done with the target, but we are backpropogating with this one.
+        critic_input = torch.cat((obs_full.t(), action), dim=1).to(device)
+        q = agent.critic(critic_input)
+
+        huber_loss = torch.nn.SmoothL1Loss()
+        critic_loss = huber_loss(q, y.detach())
+        # not gradient clipping here either, it wasn't done in the lab but looks like they thought about it
+        # torch.nn.utils.clip_grad_norm_(agent.critic.parameters(), 0.5)
+        agent.critic_optimizer.step()
+
+        # actor update
+        agent.actor_optimizer.zero_grad()
+
+        # interesting step here, so we don't need to compute the gradient for the observations of other agents
+        q_input = [
+            self.maddpg_agent[i].actor(ob)
+            if i == agent_number
+            else self.maddpg_agent[i].actor(ob).detach()
+            for i, ob in enumerate(obs)
+        ]
+
+        # just like we have been doing, concatenate along the columns for this matrix of actions
+        q_input = torch.cat(q_input, dim=1)
+
+        # combine along the columns here as well so the observations and inputs are combined, transposing
+        # they mention that the observations are the same for the most part adn the first one has everything
+        # that is interesting, was that specific to the environment? idk, but for an actor we have what each
+        # actor did combined with the state they saw, so we should be able to find a better policy through
+        # gradient ascent
+        q_input2 = torch.cat((obs_full.t(), q_input), dim=1)
+        # and here we do, negative mean of the Q value gets us the vector for how far and in what direction to travel
+        # in the policy space
+        actor_loss = -agent.critic(q_input2).mean()
+        actor_loss.backward()
+        # again, this clipping is here, might try it if needed and see what the results look like.
+        # torch.nn.utils.clip_grad_norm_(agent.actor.parameters(), 0.5)
+        agent.actor_optimizer.step()
+
+        al = actor_loss.cpu().detach().item()
+        cl = critic_loss.cpu().detach().item()
+        logger.add_scalars(
+            "agent%i/losses" % agent_number,
+            {"critic loss": cl, "actor_loss": al},
+            self.iter,
+        )
+
+    def update_targets(self):
+        self.iter += 1
+        for agent in self.maddpg_agent:
+            soft_update(agent.target_actor, agent.local_actor, self.tau)
+            soft_update(agent.target_critic, agent.local_critic, self.tau)
+
+
 class OUNoise:
     """Ornstein-Uhlenbeck process."""
 
