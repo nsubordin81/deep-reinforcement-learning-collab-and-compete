@@ -56,13 +56,10 @@ class Agent:
         # Replay memory
         self.memory = ReplayBuffer(action_size, BUFFER_SIZE, BATCH_SIZE, random_seed)
 
-    def step(self, states, actions, rewards, next_states, dones):
+    def step(self, state, action, reward, next_state, done):
         """Save experience in replay memory, and use random sample from buffer to learn."""
         # Save experience / reward
-        for state, action, reward, next_state, done in zip(
-            states, actions, rewards, next_states, dones
-        ):
-            self.memory.add(state, action, reward, next_state, done)
+        self.memory.add(state, action, reward, next_state, done)
 
         # Learn, if enough samples are available in memory
         if len(self.memory) > BATCH_SIZE:
@@ -116,6 +113,9 @@ class Agent:
         actions_next = self.actor_target(next_states)
         Q_targets_next = self.critic_target(next_states, actions_next)
         # Compute Q targets for current states (y_i)
+        # import pdb
+
+        # pdb.set_trace()
         Q_targets = rewards + (gamma * Q_targets_next * (1 - dones))
         # Compute critic loss
         Q_expected = self.critic_local(states, actions)
@@ -213,7 +213,6 @@ class ReplayBuffer:
     def sample(self):
         """Randomly sample a batch of experiences from memory."""
         experiences = random.sample(self.memory, k=self.batch_size)
-
         states = (
             torch.from_numpy(np.vstack([e.state for e in experiences if e is not None]))
             .float()
@@ -228,7 +227,10 @@ class ReplayBuffer:
         )
         rewards = (
             torch.from_numpy(
-                np.vstack([e.reward for e in experiences if e is not None])
+                np.vstack(
+                    # TODO this shouldn't be hardcoded to 2
+                    [e.reward.reshape(2, 1) for e in experiences if e is not None]
+                )
             )
             .float()
             .to(device)
@@ -242,9 +244,10 @@ class ReplayBuffer:
         )
         dones = (
             torch.from_numpy(
-                np.vstack([e.done for e in experiences if e is not None]).astype(
-                    np.uint8
-                )
+                # TODO this should not be hardcoded to 2, shoudl be num agents or transpose
+                np.vstack(
+                    [e.done.reshape(2, 1) for e in experiences if e is not None]
+                ).astype(np.uint8)
             )
             .float()
             .to(device)
