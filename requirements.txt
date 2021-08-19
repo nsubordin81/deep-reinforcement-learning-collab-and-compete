@@ -10,6 +10,7 @@ pyyaml
 protobuf==3.5.2
 grpcio==1.11.0
 pandas
+progressbar2==3.53.1
 scipy
 ipykernel
 toolz==0.11.1
