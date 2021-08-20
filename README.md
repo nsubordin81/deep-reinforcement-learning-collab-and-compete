@@ -10,10 +10,10 @@ training a DRL algorithm in a multi agent environment
 - [x] This file describes the project environment details, such as state and action spaces and when the environment is solved
 - [x] This file has instructions for getting the necessary dependencies and downloading files needed to train and use the agent
 - [x] This file has a description for how to run the agent
-- [ ] I've got a Report.md outlining the implementation, including the learning algorithm used, the hyperparameters chosen, and the model architectures for ANNs
-- [ ] There is a plot of the rewards in the Report.md file showing an agent successfully completing the task
-- [ ] The Report.md file has the number of episodes required to solve the environment as well
-- [ ] The Report.md has some concrete suggestions for how I might improve on the implementation. 
+- [x] I've got a Report.md outlining the implementation, including the learning algorithm used, the hyperparameters chosen, and the model architectures for ANNs
+- [x] There is a plot of the rewards in the Report.md file showing an agent successfully completing the task
+- [x] The Report.md file has the number of episodes required to solve the environment as well
+- [x] The Report.md has some concrete suggestions for how I might improve on the implementation. 
 
 ## Project Environment Details
 
