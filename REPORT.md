@@ -69,7 +69,7 @@ The average score of the highest performing agent per episode surpassed 0.5 over
 
 here is a log (the 30 is because this is an adapted reacher environment and I didn't make the goal score a target in the log statement)
 
-![Epsiode Log For Solved Environment](collab_compete_solved_episodes.png?raw=true)
+![Epsiode Log For Solved Environment](collab_complete_solved_episodes.png?raw=true)
 
 ![Plot For Solved Environment](collab_compete_solved_rewards_plot.png?raw=true)
 
